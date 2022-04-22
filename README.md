@@ -8,4 +8,4 @@ Steps:<br />
 4.python -m streamlit run main.py<br />
 <br />
 viola!<br />
-![Alt Text](https://media.giphy.com/media/jg0261BzBtGZYkXlBl/giphy.gif)
+![Alt Text](https://media.giphy.com/media/tZTJaE7kUCu0z3jUgn/giphy.gif)
