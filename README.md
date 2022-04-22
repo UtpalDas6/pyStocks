@@ -6,4 +6,6 @@ Steps:<br />
 2.cd into pystocks directory<br />
 3.pip install -r requirements.txt<br />
 4.python -m streamlit run main.py<br />
-viola!
+<br />
+viola!<br />
+![Alt Text](https://media.giphy.com/media/jg0261BzBtGZYkXlBl/giphy.gif)
