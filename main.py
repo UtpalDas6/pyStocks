@@ -1,3 +1,4 @@
+import csv
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -18,7 +19,19 @@ st.write(
     "their own shares recently — that's usually a signal worth watching."
 )
 
-query = st.text_input("Stock symbol or company name", "TCS", help="e.g. TCS, Reliance Industries, HDFC Bank")
+with open("nifty50.csv") as f:
+    NIFTY50 = [(row["symbol"], row["name"]) for row in csv.DictReader(f)]
+OPTIONS = [f"{sym} — {name}" for sym, name in NIFTY50]
+SYMBOL_BY_OPTION = {f"{sym} — {name}": sym for sym, name in NIFTY50}
+
+choice = st.selectbox(
+    "Stock symbol or company name",
+    OPTIONS,
+    index=next(i for i, (sym, _) in enumerate(NIFTY50) if sym == "TCS"),
+    accept_new_options=True,
+    help="Pick a suggestion or type any NSE symbol/company name",
+)
+query = SYMBOL_BY_OPTION.get(choice, choice)
 
 
 @st.cache_data(ttl=3600)
