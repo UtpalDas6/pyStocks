@@ -1,71 +1,60 @@
 import streamlit as st
-from datetime import date
-
 import yfinance as yf
-from nsetools import Nse
-from fbprophet import Prophet
-from fbprophet.plot import plot_plotly
+import pandas as pd
+from datetime import date
 from plotly import graph_objs as go
+
+from promoter import fetch_promoter_holding, compute_signal
 
 START = "2015-01-01"
 TODAY = date.today().strftime("%Y-%m-%d")
 
-st.title('pyStocks+')
+st.set_page_config(page_title="pyStocks+", layout="wide")
+st.title("pyStocks+")
+st.caption("Buy/sell signal from promoter shareholding trend")
 
-nse = Nse()
-stocks_dict = nse.get_stock_codes()
-stocks = stocks_dict.keys()
-codes = [s+'.NS' for s in stocks if s!='SYMBOL']
-stocks = tuple(codes)
-selected_stock = st.selectbox('Select stock for prediction', stocks)
-print(selected_stock)
-
-n_years = st.slider('Years of prediction:', 1, 4)
-period = n_years * 365
+symbol = st.text_input("NSE stock symbol (e.g. TCS, RELIANCE, INFY)", "TCS").strip().upper()
 
 
-@st.cache
-def load_data(ticker):
-    data = yf.download(ticker, START, TODAY)
+@st.cache_data(ttl=3600)
+def load_price(ticker):
+    data = yf.download(f"{ticker}.NS", start=START, end=TODAY)
     data.reset_index(inplace=True)
     return data
 
-	
-data_load_state = st.text('Loading data...')
-data = load_data(selected_stock)
-data_load_state.text('Loading data... done!')
-k = (selected_stock[:len(selected_stock)-3])
-st.header(stocks_dict[k])
-st.subheader('Raw data')
-st.write(data.tail())
 
-# Plot raw data
-def plot_raw_data():
-	fig = go.Figure()
-	fig.add_trace(go.Scatter(x=data['Date'], y=data['Open'], name="stock_open"))
-	fig.add_trace(go.Scatter(x=data['Date'], y=data['Close'], name="stock_close"))
-	fig.layout.update(title_text='Time Series data with Rangeslider', xaxis_rangeslider_visible=True)
-	st.plotly_chart(fig)
-	
-plot_raw_data()
+data = load_price(symbol)
+if data.empty:
+    st.error(f"No price data found for {symbol}.NS — check the symbol.")
+    st.stop()
 
-# Predict forecast with Prophet.
-df_train = data[['Date','Close']]
-df_train = df_train.rename(columns={"Date": "ds", "Close": "y"})
+st.subheader("Price")
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=data["Date"], y=data["Open"], name="Open"))
+fig.add_trace(go.Scatter(x=data["Date"], y=data["Close"], name="Close"))
+fig.layout.update(xaxis_rangeslider_visible=True)
+st.plotly_chart(fig, use_container_width=True)
+st.dataframe(data.tail())
 
-m = Prophet()
-m.fit(df_train)
-future = m.make_future_dataframe(periods=period)
-forecast = m.predict(future)
+st.subheader("Promoter shareholding signal")
+try:
+    holding_df = fetch_promoter_holding(symbol)
+    if holding_df.empty:
+        raise ValueError("NSE returned no shareholding data")
+except Exception:
+    st.warning(
+        "Live NSE fetch failed (NSE blocks most cloud/datacenter IPs, including this app's host). "
+        "Enter the last two quarterly promoter holding % manually, e.g. from screener.in or NSE's site."
+    )
+    col1, col2 = st.columns(2)
+    prev_pct = col1.number_input("Previous quarter promoter holding %", 0.0, 100.0, 50.0)
+    latest_pct = col2.number_input("Latest quarter promoter holding %", 0.0, 100.0, 50.0)
+    holding_df = pd.DataFrame({"promoter_pct": [prev_pct, latest_pct]})
 
-# Show and plot forecast
-st.subheader('Forecast data')
-st.write(forecast.tail())
-    
-st.write(f'Forecast plot for {n_years} years')
-fig1 = plot_plotly(m, forecast)
-st.plotly_chart(fig1)
+signal, delta = compute_signal(holding_df)
+color = {"BUY": "green", "SELL": "red", "HOLD": "gray"}[signal]
+st.markdown(f"## :{color}[{signal}]  (Δ promoter holding: {delta:+.2f}%)")
 
-st.write("Forecast components")
-fig2 = m.plot_components(forecast)
-st.write(fig2)
+if "quarter" in holding_df.columns:
+    st.line_chart(holding_df.set_index("quarter")["promoter_pct"])
+    st.dataframe(holding_df)
