@@ -43,7 +43,7 @@ try:
         raise ValueError("NSE returned no shareholding data")
 except Exception:
     st.warning(
-        "Live NSE fetch failed (NSE blocks most cloud/datacenter IPs, including this app's host). "
+        "Live NSE fetch failed for this symbol/host right now. "
         "Enter the last two quarterly promoter holding % manually, e.g. from screener.in or NSE's site."
     )
     col1, col2 = st.columns(2)

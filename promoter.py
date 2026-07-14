@@ -3,32 +3,36 @@ import requests
 import pandas as pd
 
 NSE_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept": "application/json",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/118.0",
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Referer": "https://www.nseindia.com/get-quotes/equity?symbol=HDFCBANK",
 }
 
 
 def fetch_promoter_holding(symbol: str) -> pd.DataFrame:
     """Best-effort fetch of quarterly promoter holding % from NSE's public API.
 
-    NSE aggressively blocks datacenter/cloud IPs, so this frequently fails when
-    deployed. Callers should fall back to manual entry (see app.py) on error.
+    NSE requires warmed-up session cookies from a real page (not just the
+    homepage) or every request 404s. Still cloud-IP-dependent, so callers
+    should fall back to manual entry (see app.py) on error.
     """
     session = requests.Session()
-    session.get("https://www.nseindia.com", headers=NSE_HEADERS, timeout=5)
+    session.headers.update(NSE_HEADERS)
+    session.get("https://www.nseindia.com/option-chain", timeout=5)
     resp = session.get(
-        "https://www.nseindia.com/api/corporate-shareholding-pattern",
-        params={"index": "equities", "symbol": symbol},
-        headers=NSE_HEADERS,
+        "https://www.nseindia.com/api/corporate-share-holdings-master",
+        params={"index": "equities", "symbol": symbol.upper()},
         timeout=5,
     )
     resp.raise_for_status()
     rows = [
         {
-            "quarter": entry.get("date") or entry.get("submissionDate"),
-            "promoter_pct": float(entry.get("promoterAndPromoterGroup", 0) or 0),
+            "quarter": pd.to_datetime(entry["date"], format="%d-%b-%Y"),
+            "promoter_pct": float(entry.get("pr_and_prgrp", 0) or 0),
         }
-        for entry in resp.json().get("data", [])
+        for entry in resp.json()
+        if entry.get("date")
     ]
     df = pd.DataFrame(rows)
     return df.sort_values("quarter").reset_index(drop=True) if not df.empty else df
