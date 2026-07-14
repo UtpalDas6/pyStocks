@@ -9,11 +9,15 @@ from promoter import fetch_promoter_holding, compute_signal
 START = "2015-01-01"
 TODAY = date.today().strftime("%Y-%m-%d")
 
-st.set_page_config(page_title="pyStocks+", layout="wide")
+st.set_page_config(page_title="pyStocks+", layout="centered")
 st.title("pyStocks+")
-st.caption("Buy/sell signal from promoter shareholding trend")
+st.write(
+    "Type an NSE stock symbol. This checks whether the company's promoters "
+    "(its founders/owners) have been buying or selling their own shares "
+    "recently — that's usually a signal worth watching."
+)
 
-symbol = st.text_input("NSE stock symbol (e.g. TCS, RELIANCE, INFY)", "TCS").strip().upper()
+symbol = st.text_input("Stock symbol", "TCS", help="e.g. TCS, RELIANCE, INFY").strip().upper()
 
 
 @st.cache_data(ttl=3600)
@@ -25,36 +29,46 @@ def load_price(ticker):
 
 data = load_price(symbol)
 if data.empty:
-    st.error(f"No price data found for {symbol}.NS — check the symbol.")
+    st.error(f"Couldn't find '{symbol}' on NSE — check the spelling.")
     st.stop()
 
-st.subheader("Price")
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=data["Date"], y=data["Open"], name="Open"))
-fig.add_trace(go.Scatter(x=data["Date"], y=data["Close"], name="Close"))
-fig.layout.update(xaxis_rangeslider_visible=True)
-st.plotly_chart(fig, use_container_width=True)
-st.dataframe(data.tail())
-
-st.subheader("Promoter shareholding signal")
 try:
     holding_df = fetch_promoter_holding(symbol)
     if holding_df.empty:
         raise ValueError("NSE returned no shareholding data")
 except Exception:
-    st.warning(
-        "Live NSE fetch failed for this symbol/host right now. "
-        "Enter the last two quarterly promoter holding % manually, e.g. from screener.in or NSE's site."
+    st.info(
+        f"Couldn't fetch promoter data for {symbol} automatically right now. "
+        "Enter it yourself — check screener.in or NSE's shareholding pattern page."
     )
     col1, col2 = st.columns(2)
-    prev_pct = col1.number_input("Previous quarter promoter holding %", 0.0, 100.0, 50.0)
-    latest_pct = col2.number_input("Latest quarter promoter holding %", 0.0, 100.0, 50.0)
+    prev_pct = col1.number_input("Promoter holding last quarter (%)", 0.0, 100.0, 50.0)
+    latest_pct = col2.number_input("Promoter holding this quarter (%)", 0.0, 100.0, 50.0)
     holding_df = pd.DataFrame({"promoter_pct": [prev_pct, latest_pct]})
 
 signal, delta = compute_signal(holding_df)
-color = {"BUY": "green", "SELL": "red", "HOLD": "gray"}[signal]
-st.markdown(f"## :{color}[{signal}]  (Δ promoter holding: {delta:+.2f}%)")
+
+VERDICT = {
+    "BUY": ("🟢 BUY", "Promoters increased their stake"),
+    "SELL": ("🔴 SELL", "Promoters reduced their stake"),
+    "HOLD": ("⚪ HOLD", "No meaningful change in promoter stake"),
+}
+label, explanation = VERDICT[signal]
+st.header(label)
+st.write(f"{explanation} by {abs(delta):.2f} percentage points last quarter." if delta else explanation + ".")
+
+st.subheader(f"{symbol} price")
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=data["Date"], y=data["Close"], name="Close price"))
+fig.layout.update(xaxis_rangeslider_visible=True, showlegend=False)
+st.plotly_chart(fig, use_container_width=True)
 
 if "quarter" in holding_df.columns:
+    st.subheader("Promoter holding over time")
     st.line_chart(holding_df.set_index("quarter")["promoter_pct"])
+
+with st.expander("Show raw data"):
+    st.write("Recent price data")
+    st.dataframe(data.tail())
+    st.write("Promoter holding by quarter")
     st.dataframe(holding_df)
