@@ -5,6 +5,7 @@ from datetime import date
 from plotly import graph_objs as go
 
 from promoter import fetch_promoter_holding, compute_signal
+from lookup import resolve_symbol
 
 START = "2015-01-01"
 TODAY = date.today().strftime("%Y-%m-%d")
@@ -12,12 +13,25 @@ TODAY = date.today().strftime("%Y-%m-%d")
 st.set_page_config(page_title="pyStocks+", layout="centered")
 st.title("pyStocks+")
 st.write(
-    "Type an NSE stock symbol. This checks whether the company's promoters "
-    "(its founders/owners) have been buying or selling their own shares "
-    "recently — that's usually a signal worth watching."
+    "Type an NSE stock symbol or company name. This checks whether the "
+    "company's promoters (its founders/owners) have been buying or selling "
+    "their own shares recently — that's usually a signal worth watching."
 )
 
-symbol = st.text_input("Stock symbol", "TCS", help="e.g. TCS, RELIANCE, INFY").strip().upper()
+query = st.text_input("Stock symbol or company name", "TCS", help="e.g. TCS, Reliance Industries, HDFC Bank")
+
+
+@st.cache_data(ttl=3600)
+def cached_resolve_symbol(q):
+    return resolve_symbol(q)
+
+
+symbol = cached_resolve_symbol(query)
+if symbol is None:
+    st.error(f"Couldn't find '{query}' on NSE — try the exact symbol (e.g. INFY) or the fuller company name.")
+    st.stop()
+if symbol.upper() != query.strip().upper():
+    st.caption(f"Matched to NSE symbol: **{symbol}**")
 
 
 @st.cache_data(ttl=3600)
