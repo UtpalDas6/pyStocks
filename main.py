@@ -7,6 +7,7 @@ from plotly import graph_objs as go
 
 from promoter import fetch_promoter_holding, compute_signal
 from lookup import resolve_symbol
+from momentum import fetch_momentum
 
 START = "2015-01-01"
 TODAY = date.today().strftime("%Y-%m-%d")
@@ -99,3 +100,13 @@ with st.expander("Show raw data"):
     st.dataframe(data.tail())
     st.write("Promoter holding by quarter")
     st.dataframe(holding_df)
+
+@st.cache_data(ttl=3600)
+def cached_momentum(symbols):
+    return fetch_momentum(symbols, period="3mo")
+
+
+with st.expander("🔥 High momentum stocks (NIFTY 50, 3-month return)"):
+    momentum_df = cached_momentum(tuple(sym for sym, _ in NIFTY50))
+    st.bar_chart(momentum_df.head(10).set_index("symbol")["return_pct"])
+    st.dataframe(momentum_df.head(10), hide_index=True)
